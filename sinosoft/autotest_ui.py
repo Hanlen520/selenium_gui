@@ -32,6 +32,10 @@ global BranchFiles
 global ExcelName
 # 记录当前写入excel测试报告行数
 global ExcelRow
+# 记录当前执行的测试数据路径
+global ExcutePath
+# 记录当前执行的脚本
+global ExcutePy
 
 def png2bmp(dataset_dir):
     def file_name(file_dir):
@@ -92,7 +96,7 @@ def create_excel():
 
 # 输出测试用例的方法
 def print_excel(msg,driver):
-    driver.save_screenshot('.screenshot.png')
+    driver.save_screenshot('screenshot.png')
     sleep(5)
     png2bmp('./')
     # 打开想要更改的excel文件
@@ -102,14 +106,14 @@ def print_excel(msg,driver):
     # 获得第一个sheet的对象
     ws = new_excel.get_sheet(0)
     # 写入数据
-    ws.write(global_ui.ExcelRow, 0, '第一行，第一列')
-    ws.write(global_ui.ExcelRow, 1, '第一行，第二列')
+    ws.write(global_ui.ExcelRow, 0, global_ui.ExcutePy)
+    ws.write(global_ui.ExcelRow, 1, global_ui.ExcutePath)
     ws.write(global_ui.ExcelRow, 2, now())
     ws.write(global_ui.ExcelRow, 3, now())
     ws.write(global_ui.ExcelRow, 4, '10s')
-    ws.write(global_ui.ExcelRow, 5, '第一行，第六列')
+    ws.write(global_ui.ExcelRow, 5, '失败')
     ws.write(global_ui.ExcelRow, 6, msg)
-    ws.insert_bitmap('.screenshot.bmp', global_ui.ExcelRow, 7,scale_x=0.02, scale_y=0.02)
+    ws.insert_bitmap('screenshot.bmp', global_ui.ExcelRow, 7,scale_x=0.02, scale_y=0.02)
     # 另存为excel文件，并将文件命名
     new_excel.save(global_ui.ExcelName)
     global_ui.ExcelRow = global_ui.ExcelRow + 1
@@ -152,6 +156,7 @@ def read_by_colname(path,sheetName,colName):
 
 def read_by_rowname(path,sheetName,rawName):
     try:
+        global_ui.ExcutePath = path
         table = read_exceldata_by_name(path, sheetName)[0]
         # 修改这里的两个参数的位置可以确定是根据行名还是根据列表读取
         value = table.cell_value(get_row_index(table, rawName),1)
@@ -183,7 +188,8 @@ class Go(threading.Thread):
         self.content = content
 
     def run(self):
-        excepath = ".temp.py"
+        excepath = "temp.py"
+        global_ui.ExcutePy = "界面执行"
         f = open(excepath, "w", encoding='UTF-8')
         f.write(self.content)
         try:
@@ -227,6 +233,7 @@ class WaitThread(threading.Thread):
         # 生成excel测试报告并返回生成的测试报告名称
         # global_ui.ExcelName = create_excel()
         for branch_file in self.branch_files:
+            global_ui.ExcutePy = branch_file
             branch_go = BranchGo(branch_file)
             branch_go.start()
             while True:
