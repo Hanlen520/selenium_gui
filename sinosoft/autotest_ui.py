@@ -91,7 +91,7 @@ def create_excel():
     today_time_str = today_time_str.replace(":", "").split(".", 1)[0]
     # 以当前日期作为excel名称保存。
     excel_name = today_date_str + "_" + today_time_str + '.xls'
-    wbk.save(excel_name)
+    wbk.save("测试报告/"+excel_name)
     return excel_name
 
 # 输出测试用例的方法
@@ -100,7 +100,7 @@ def print_excel(msg,driver):
     sleep(5)
     png2bmp('./')
     # 打开想要更改的excel文件
-    old_excel = xlrd.open_workbook(global_ui.ExcelName, formatting_info=True)
+    old_excel = xlrd.open_workbook("测试报告/"+global_ui.ExcelName, formatting_info=True)
     # 将操作文件对象拷贝，变成可写的workbook对象
     new_excel = copy(old_excel)
     # 获得第一个sheet的对象
@@ -115,7 +115,7 @@ def print_excel(msg,driver):
     ws.write(global_ui.ExcelRow, 6, msg)
     ws.insert_bitmap('screenshot.bmp', global_ui.ExcelRow, 7,scale_x=0.02, scale_y=0.02)
     # 另存为excel文件，并将文件命名
-    new_excel.save(global_ui.ExcelName)
+    new_excel.save("测试报告/"+global_ui.ExcelName)
     global_ui.ExcelRow = global_ui.ExcelRow + 1
 
 def get_row_index(table, rowName):
