@@ -3,6 +3,8 @@ import wx
 import os
 import sys
 import threading
+from threading import Thread
+from threading import Lock
 import traceback
 import wx.lib.agw.customtreectrl as CT
 import ctypes
@@ -11,12 +13,15 @@ import importlib
 import xlrd
 import xlwt
 import random
+import time
+import datetime
 import os.path as osp
 from PIL import Image
-from datetime import datetime
+# from datetime import datetime
 from selenium import webdriver
 from time import sleep
 from xlutils.copy import copy
+from selenium.webdriver.chrome.options import Options
 
 importlib.reload(sys)
 
@@ -36,6 +41,17 @@ global ExcelRow
 global ExcutePath
 # 记录当前执行的脚本
 global ExcutePy
+
+# 计算指定日期的后n天，前n天是哪一天
+def getday(n=0):
+    nowdate = time.strftime('%Y-%m-%d')
+    y = int(nowdate.split("-",2)[0])
+    m = int(nowdate.split("-", 2)[1])
+    d = int(nowdate.split("-", 2)[2])
+    the_date = datetime.datetime(y,m,d)
+    result_date = the_date + datetime.timedelta(days=n)
+    d = result_date.strftime('%Y-%m-%d')
+    return d
 
 def png2bmp(dataset_dir):
     def file_name(file_dir):
@@ -61,10 +77,10 @@ def print(content):
 '''获取当前时间'''
 def now():
     # 获取当前日期，得到一个datetime对象如：(2016, 8, 9, 23, 12, 23, 424000)
-    today = datetime.today()
+    today = datetime.datetime.today()
     # 将获取到的datetime对象仅取日期如：2016-8-9
-    today_date_str = str(datetime.date(today))
-    today_time_str = str(datetime.time(today))
+    today_date_str = str(datetime.datetime.date(today))
+    today_time_str = str(datetime.datetime.time(today))
     now_date = today_date_str + " " + today_time_str.split(".", 1)[0]
     return now_date
 
@@ -80,14 +96,14 @@ def create_excel():
     sheet.write(0, 3, '结束时间')
     sheet.write(0, 4, '执行时长(秒)')
     sheet.write(0, 5, '执行结果')
-    sheet.write(0, 6, '错误消息')
-    sheet.write(0, 7, '错误截图')
+    sheet.write(0, 6, '自定义消息')
+    sheet.write(0, 7, '截图')
     # sheet.write_merge(2,2,0,0,1)
     # # 获取当前日期，得到一个datetime对象如：(2016, 8, 9, 23, 12, 23, 424000)
-    today = datetime.today()
+    today = datetime.datetime.today()
     # 将获取到的datetime对象仅取日期如：2016-8-9
-    today_date_str = str(datetime.date(today))
-    today_time_str = str(datetime.time(today))
+    today_date_str = str(datetime.datetime.date(today))
+    today_time_str = str(datetime.datetime.time(today))
     today_time_str = today_time_str.replace(":", "").split(".", 1)[0]
     # 以当前日期作为excel名称保存。
     excel_name = today_date_str + "_" + today_time_str + '.xls'
@@ -95,10 +111,14 @@ def create_excel():
     return excel_name
 
 # 输出测试用例的方法
-def print_excel(msg,driver):
-    driver.save_screenshot('screenshot.png')
+# mutex=Lock() #创建锁对象
+def print_excel(result,msg,driver):
+    # mutex.acquire()  # 等待可以上锁，通知而不是轮训，没有占用CPU
+    random_number = random.random()
+    os.makedirs('temp/'+str(random_number)+'/')
+    driver.save_screenshot('temp/'+str(random_number)+'/screenshot.png')
     sleep(5)
-    png2bmp('./')
+    png2bmp('temp/'+str(random_number)+'/')
     # 打开想要更改的excel文件
     old_excel = xlrd.open_workbook("测试报告/"+global_ui.ExcelName, formatting_info=True)
     # 将操作文件对象拷贝，变成可写的workbook对象
@@ -106,17 +126,20 @@ def print_excel(msg,driver):
     # 获得第一个sheet的对象
     ws = new_excel.get_sheet(0)
     # 写入数据
-    ws.write(global_ui.ExcelRow, 0, global_ui.ExcutePy)
+    thread = threading.current_thread()
+    thread_id = thread.getName();
+    ws.write(global_ui.ExcelRow, 0, global_ui.ExcutePy[int(thread_id)])
     ws.write(global_ui.ExcelRow, 1, global_ui.ExcutePath)
     ws.write(global_ui.ExcelRow, 2, now())
     ws.write(global_ui.ExcelRow, 3, now())
-    ws.write(global_ui.ExcelRow, 4, '10s')
-    ws.write(global_ui.ExcelRow, 5, '失败')
+    ws.write(global_ui.ExcelRow, 4, '21s')
+    ws.write(global_ui.ExcelRow, 5, result)
     ws.write(global_ui.ExcelRow, 6, msg)
-    ws.insert_bitmap('screenshot.bmp', global_ui.ExcelRow, 7,scale_x=0.02, scale_y=0.02)
+    ws.insert_bitmap('temp/'+str(random_number)+'/screenshot.bmp', global_ui.ExcelRow, 7,scale_x=0.02, scale_y=0.02)
     # 另存为excel文件，并将文件命名
     new_excel.save("测试报告/"+global_ui.ExcelName)
     global_ui.ExcelRow = global_ui.ExcelRow + 1
+    # mutex.release()  # 解锁
 
 def get_row_index(table, rowName):
     rowIndex = None
@@ -207,8 +230,8 @@ class Go(threading.Thread):
             global_ui.Consoles.SetValue(new_consoles)
 
 class BranchGo(threading.Thread):
-    def __init__(self, excepath):
-        threading.Thread.__init__(self)
+    def __init__(self, excepath,threadid):
+        threading.Thread.__init__(self, name=threadid)
         self.excepath = excepath
 
     def run(self):
@@ -231,10 +254,15 @@ class WaitThread(threading.Thread):
 
     def run(self):
         # 生成excel测试报告并返回生成的测试报告名称
-        # global_ui.ExcelName = create_excel()
+        global_ui.ExcelName = create_excel()
+        global_ui.ExcelRow = 1
+        dict_branchfile_names = {}
+        threadid = 0;
         for branch_file in self.branch_files:
-            global_ui.ExcutePy = branch_file
-            branch_go = BranchGo(branch_file)
+            threadid = threadid + 1
+            dict_branchfile_names[threadid] = branch_file
+            global_ui.ExcutePy = dict_branchfile_names
+            branch_go = BranchGo(branch_file,threadid)
             branch_go.start()
             while True:
                 # 判断正在运行的线程数量,如果小于指定的thread_num则退出while循环,
@@ -434,7 +462,12 @@ class global_ui():
     class button1(wx.Panel):
         def __init__(self, parent):
             wx.Panel.__init__(self, parent)
-            wx.Button(self, pos=(9, 10), label="正常模式")
+            b1 = wx.Button(self, pos=(9, 10), label="清空控制台")
+            self.Bind(wx.EVT_BUTTON, self.clean_console, b1)
+
+        # 清空控制台的方法
+        def clean_console(self, event):
+            global_ui.Consoles.SetValue("")
 
     class button2(wx.Panel):
         def __init__(self, parent):
