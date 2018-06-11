@@ -41,8 +41,18 @@ global ExcelRow
 global ExcutePath
 # 记录当前执行的脚本
 global ExcutePy
+# 记录脚本的开始时间
+global ExcuteStartTime
 
-# 计算指定日期的后n天，前n天是哪一天
+'''将时间转换为时间戳'''
+def time_to_timestamp(dt):
+    # 转换成时间数组
+    timeArray = time.strptime(dt, "%Y-%m-%d %H:%M:%S")
+    # 转换成时间戳
+    timestamp = time.mktime(timeArray)
+    return timestamp
+
+'''计算指定日期的后n天，前n天是哪一天'''
 def getday(n=0):
     nowdate = time.strftime('%Y-%m-%d')
     y = int(nowdate.split("-",2)[0])
@@ -53,6 +63,7 @@ def getday(n=0):
     d = result_date.strftime('%Y-%m-%d')
     return d
 
+'''将png图片类型转换为bmp时间类型'''
 def png2bmp(dataset_dir):
     def file_name(file_dir):
         L = []
@@ -97,7 +108,7 @@ def create_excel():
     sheet.write(0, 4, '执行时长(秒)')
     sheet.write(0, 5, '执行结果')
     sheet.write(0, 6, '自定义消息')
-    sheet.write(0, 7, '截图')
+    # sheet.write(0, 7, '截图')
     # sheet.write_merge(2,2,0,0,1)
     # # 获取当前日期，得到一个datetime对象如：(2016, 8, 9, 23, 12, 23, 424000)
     today = datetime.datetime.today()
@@ -111,14 +122,14 @@ def create_excel():
     return excel_name
 
 # 输出测试用例的方法
-# mutex=Lock() #创建锁对象
-def print_excel(result,msg,driver):
-    # mutex.acquire()  # 等待可以上锁，通知而不是轮训，没有占用CPU
-    random_number = random.random()
-    os.makedirs('temp/'+str(random_number)+'/')
-    driver.save_screenshot('temp/'+str(random_number)+'/screenshot.png')
-    sleep(5)
-    png2bmp('temp/'+str(random_number)+'/')
+mutex=Lock() #创建锁对象
+def print_excel(result,msg):
+    mutex.acquire()  # 等待可以上锁，通知而不是轮训，没有占用CPU
+    # random_number = random.random()
+    # os.makedirs('temp/'+str(random_number)+'/')
+    # driver.save_screenshot('temp/'+str(random_number)+'/screenshot.png')
+    # sleep(5)
+    # png2bmp('temp/'+str(random_number)+'/')
     # 打开想要更改的excel文件
     old_excel = xlrd.open_workbook("测试报告/"+global_ui.ExcelName, formatting_info=True)
     # 将操作文件对象拷贝，变成可写的workbook对象
@@ -128,18 +139,21 @@ def print_excel(result,msg,driver):
     # 写入数据
     thread = threading.current_thread()
     thread_id = thread.getName();
-    ws.write(global_ui.ExcelRow, 0, global_ui.ExcutePy[int(thread_id)])
+    if(thread_id=="go"):
+        ws.write(global_ui.ExcelRow, 0, global_ui.ExcutePy[thread_id])
+    else:
+        ws.write(global_ui.ExcelRow, 0, global_ui.ExcutePy[int(thread_id)])
     ws.write(global_ui.ExcelRow, 1, global_ui.ExcutePath)
-    ws.write(global_ui.ExcelRow, 2, now())
+    ws.write(global_ui.ExcelRow, 2, global_ui.ExcuteStartTime[int(thread_id)])
     ws.write(global_ui.ExcelRow, 3, now())
-    ws.write(global_ui.ExcelRow, 4, '21s')
+    ws.write(global_ui.ExcelRow, 4, str(time_to_timestamp(now())-time_to_timestamp(global_ui.ExcuteStartTime[int(thread_id)])).split(".",1)[0]+"s")
     ws.write(global_ui.ExcelRow, 5, result)
     ws.write(global_ui.ExcelRow, 6, msg)
-    ws.insert_bitmap('temp/'+str(random_number)+'/screenshot.bmp', global_ui.ExcelRow, 7,scale_x=0.02, scale_y=0.02)
+    # ws.insert_bitmap('temp/'+str(random_number)+'/screenshot.bmp', global_ui.ExcelRow, 7,scale_x=0.02, scale_y=0.02)
     # 另存为excel文件，并将文件命名
     new_excel.save("测试报告/"+global_ui.ExcelName)
     global_ui.ExcelRow = global_ui.ExcelRow + 1
-    # mutex.release()  # 解锁
+    mutex.release()  # 解锁
 
 def get_row_index(table, rowName):
     rowIndex = None
@@ -212,7 +226,8 @@ class Go(threading.Thread):
 
     def run(self):
         excepath = "temp.py"
-        global_ui.ExcutePy = "界面执行"
+        dict_names = {"go": "界面执行"}
+        global_ui.ExcutePy = dict_names
         f = open(excepath, "w", encoding='UTF-8')
         f.write(self.content)
         try:
@@ -257,11 +272,14 @@ class WaitThread(threading.Thread):
         global_ui.ExcelName = create_excel()
         global_ui.ExcelRow = 1
         dict_branchfile_names = {}
+        dict_start_time = {}
         threadid = 0;
         for branch_file in self.branch_files:
             threadid = threadid + 1
             dict_branchfile_names[threadid] = branch_file
+            dict_start_time[threadid] = now()
             global_ui.ExcutePy = dict_branchfile_names
+            global_ui.ExcuteStartTime = dict_start_time
             branch_go = BranchGo(branch_file,threadid)
             branch_go.start()
             while True:
@@ -334,7 +352,7 @@ class global_ui():
         def __init__(self, parent):
             wx.Notebook.__init__(self, parent)
             self.text_panel = wx.Panel(self, size=(1000, 1000))
-            init_structure = "try:\n    path = \"测试用例/UI测试.xls\"\n    sheet_name = \"test_sheet\"\n    driver = webdriver.Chrome()\n    driver.implicitly_wait(10)\n    url = read_by_rowname(path, sheet_name, \"url\")\n    driver.get(url)\n    driver.find_element_by_id(\"kw\").send_keys(\"自动化测试\")\n    sleep(3)\n    driver.find_element_by_id(\"su\").click()\n    \nexcept:\n    raise RuntimeError(traceback)\nfinally:\n    driver.quit()"
+            init_structure = "try:\n    path = \"测试用例/UI测试.xls\"\n    sheet_name = \"test_sheet\"\n    driver = webdriver.Chrome()\n    driver.implicitly_wait(10)\n    url = read_by_rowname(path, sheet_name, \"url\")\n    driver.get(url)\n    driver.find_element_by_id(\"kw\").send_keys(\"自动化测试\")\n    sleep(3)\n    driver.find_element_by_id(\"su\").click()\n    \nexcept:\n    print_excel(\"失败\", str(traceback.format_exc()))\n    raise RuntimeError(traceback)\nfinally:\n    driver.quit()"
             global_ui.Contents = wx.TextCtrl(self.text_panel, -1, init_structure, size=(960, 500), style=wx.TE_MULTILINE | wx.TE_NOHIDESEL | wx.TE_PROCESS_ENTER | wx.TE_PROCESS_TAB | wx.HSCROLL)
             global_ui.Consoles = wx.TextCtrl(self.text_panel, -1, "", pos=(0,520), size=(960, 215), style=wx.TE_MULTILINE | wx.TE_NOHIDESEL | wx.TE_RICH | wx.TE_PROCESS_ENTER | wx.TE_PROCESS_TAB | wx.HSCROLL)
             font = wx.Font(10, wx.SWISS, wx.NORMAL, wx.NORMAL)
