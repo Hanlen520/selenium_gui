@@ -81,7 +81,7 @@ def png2bmp(dataset_dir):
         img = Image.open(path)
     img.save(path[0:len(path) - 4] + '.bmp')
 
-# 覆盖print方法，使print能够输出到gui工具控制台
+'''覆盖print方法，使print能够输出到gui工具控制台'''
 def print(content):
     global_ui.Consoles.SetValue(str(global_ui.Consoles.GetValue())+str(content)+"\n")
 
@@ -121,7 +121,7 @@ def create_excel():
     wbk.save("测试报告/"+excel_name)
     return excel_name
 
-# 输出测试用例的方法
+'''输出测试用例的方法'''
 mutex=Lock() #创建锁对象
 def print_excel(result,msg):
     mutex.acquire()  # 等待可以上锁，通知而不是轮训，没有占用CPU
